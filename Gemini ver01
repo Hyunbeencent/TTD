@@ -1,0 +1,724 @@
+import React, { useState, useMemo, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getFirestore, collection, doc, setDoc, onSnapshot, query, deleteDoc, getDocs } from 'firebase/firestore';
+import { 
+  Search, 
+  CheckCircle2, 
+  Clock, 
+  TrendingUp,
+  User,
+  MessageSquare,
+  Filter,
+  X,
+  History,
+  Plus,
+  Trash2,
+  Unlock,
+  LogIn,
+  Timer,
+  Sparkles,
+  BrainCircuit,
+  Loader2,
+  Zap,
+  Snail,
+  Trophy,
+  Flame,
+  ArrowLeft,
+  ChevronDown,
+  ChevronUp,
+  Save,
+  RotateCcw,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
+} from 'lucide-react';
+
+// --- Constants ---
+const STATUS_OPTIONS = ["Done", "Hold", "Failed", "on track", "delayed", "Canceled"];
+const TODAY = new Date('2026-04-02');
+const TODAY_STR = '2026-04-02';
+
+// --- Firebase Configuration ---
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'pm-dashboard-v1';
+
+// --- Initial Master Data (All 182 items restored) ---
+const masterTasksData = [
+  { id: "1", item: "Automatan Servo motor procurement (Automax 1)", owner: "Antonio", comment: "Canceled", status: "Canceled", assignedDate: "01/13/25", dueDate: "", finishDate: "06/23/25", lastUpdate: "" },
+  { id: "2", item: "Stitching machine 1&2 report to the supplier", owner: "Enrique / Antonio", comment: "Done", status: "Done", assignedDate: "01/13/25", dueDate: "", finishDate: "01/14/25", lastUpdate: "" },
+  { id: "3", item: "Doctor blade of C1 BF repair", owner: "Antonio / Enrique", comment: "Done", status: "Done", assignedDate: "01/13/25", dueDate: "", finishDate: "01/14/25", lastUpdate: "" },
+  { id: "4", item: "Automax + repair", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "01/13/25", dueDate: "", finishDate: "01/14/25", lastUpdate: "" },
+  { id: "5", item: "Super Jumb hieght variation check", owner: "Joel/Enrique", comment: "Done", status: "Done", assignedDate: "01/17/25", dueDate: "", finishDate: "01/20/25", lastUpdate: "" },
+  { id: "6", item: "C1 Slitter score check", owner: "Arturo/Hermen/Antonio", comment: "Duplex 1 electric failure, Duplex 2 OK", status: "delayed", assignedDate: "01/17/25", dueDate: "03/02/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "7", item: "C1 Johnson Temprature issue check", owner: "Arturo/Enrique", comment: "Done", status: "Done", assignedDate: "01/17/25", dueDate: "", finishDate: "01/20/25", lastUpdate: "" },
+  { id: "8", item: "C1 Glue shaft issue check", owner: "Arturo/Enrique", comment: "Done", status: "Done", assignedDate: "01/17/25", dueDate: "", finishDate: "01/20/25", lastUpdate: "" },
+  { id: "9", item: "Sending outsourcing V-board 6mm", owner: "Imelda", comment: "Done", status: "Done", assignedDate: "01/17/25", dueDate: "", finishDate: "01/20/25", lastUpdate: "" },
+  { id: "10", item: "Install 3 chinese scrap belt", owner: "Enrique/Joel", comment: "Done", status: "Done", assignedDate: "01/20/25", dueDate: "", finishDate: "07/28/25", lastUpdate: "" },
+  { id: "11", item: "P2 physical inv", owner: "Joel", comment: "Done", status: "Done", assignedDate: "01/20/25", dueDate: "", finishDate: "01/28/25", lastUpdate: "" },
+  { id: "12", item: "P2 QC report", owner: "Joel", comment: "Done", status: "Done", assignedDate: "01/20/25", dueDate: "", finishDate: "01/27/25", lastUpdate: "" },
+  { id: "13", item: "TCY Testing", owner: "Gustavo/Enrique", comment: "Done", status: "Done", assignedDate: "01/27/25", dueDate: "", finishDate: "04/22/25", lastUpdate: "" },
+  { id: "14", item: "Buy part for Sharpener gap control of C2", owner: "Antonio / Joel", comment: "Done", status: "Done", assignedDate: "02/06/25", dueDate: "", finishDate: "02/13/25", lastUpdate: "" },
+  { id: "15", item: "Sinil Traning program", owner: "Saul / Gustavo", comment: "Done", status: "Done", assignedDate: "02/13/25", dueDate: "", finishDate: "02/18/25", lastUpdate: "" },
+  { id: "16", item: "Put Target on the machines", owner: "Joel", comment: "Done", status: "Done", assignedDate: "02/13/25", dueDate: "", finishDate: "03/21/25", lastUpdate: "" },
+  { id: "17", item: "Foxconn Production plan", owner: "Vincent", comment: "Done", status: "Done", assignedDate: "02/13/25", dueDate: "", finishDate: "02/13/25", lastUpdate: "" },
+  { id: "18", item: "Infeed conveyor schedule on ext. area", owner: "Enrique / Gustavo", comment: "TCY done (need to move roll slitter). Alpha output is extended, infeed needs more extended", status: "delayed", assignedDate: "02/13/25", dueDate: "03/10/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "19", item: "Sultana lamina rwk", owner: "Arturo", comment: "Done", status: "Done", assignedDate: "02/13/25", dueDate: "", finishDate: "02/28/25", lastUpdate: "" },
+  { id: "20", item: "SAMEX DA/Cliphole rwk", owner: "Joel", comment: "Not applicable", status: "Done", assignedDate: "02/13/25", dueDate: "", finishDate: "02/13/25", lastUpdate: "" },
+  { id: "21", item: "Ishikawa 2 change gluing sys. To Valco", owner: "Enrique / Gustavo", comment: "Done", status: "Done", assignedDate: "02/17/25", dueDate: "", finishDate: "02/25/25", lastUpdate: "" },
+  { id: "22", item: "Innovation team yearly plan", owner: "Gustavo/Yarafat", comment: "Done", status: "Done", assignedDate: "02/18/25", dueDate: "", finishDate: "03/21/25", lastUpdate: "" },
+  { id: "23", item: "IMMS cost reduction strategy", owner: "Saul", comment: "Done", status: "Done", assignedDate: "02/19/25", dueDate: "", finishDate: "03/21/25", lastUpdate: "" },
+  { id: "24", item: "Dismss 5 operators in February", owner: "Joel", comment: "2 dismissed", status: "Done", assignedDate: "02/19/25", dueDate: "", finishDate: "03/12/25", lastUpdate: "" },
+  { id: "25", item: "Dismiss 5 bad employee beside production", owner: "Saul/Gustavo", comment: "3 dismissed", status: "Done", assignedDate: "02/19/25", dueDate: "", finishDate: "03/12/25", lastUpdate: "" },
+  { id: "26", item: "Automax production direction change", owner: "Joel", comment: "Done", status: "Done", assignedDate: "02/21/25", dueDate: "", finishDate: "03/12/25", lastUpdate: "" },
+  { id: "27", item: "C1 Slotter / Heating plate checking (Delamination)", owner: "Arturo/Enrique/Antonio", comment: "Done", status: "Done", assignedDate: "02/21/25", dueDate: "", finishDate: "05/11/25", lastUpdate: "" },
+  { id: "28", item: "Langston location change", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "02/21/25", dueDate: "", finishDate: "04/02/25", lastUpdate: "" },
+  { id: "29", item: "PL1 / PL2 issue check with SanSan", owner: "Joel/Enrique", comment: "Done", status: "Done", assignedDate: "02/21/25", dueDate: "", finishDate: "02/24/25", lastUpdate: "" },
+  { id: "30", item: "C3 Test", owner: "Enrique/Arturo", comment: "Tested, score position incorrect and no blower, and steam leakings", status: "Done", assignedDate: "02/24/25", dueDate: "", finishDate: "03/04/25", lastUpdate: "" },
+  { id: "31", item: "QC Restructuring", owner: "Jorge", comment: "Done", status: "Done", assignedDate: "02/24/25", dueDate: "", finishDate: "02/27/25", lastUpdate: "" },
+  { id: "32", item: "C2 Duplex repair", owner: "Hermen/Carlos", comment: "Marquip fix duples W14.", status: "delayed", assignedDate: "02/24/25", dueDate: "", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "33", item: "Analyze what happened with Hisense order", owner: "Joel", comment: "Done", status: "Done", assignedDate: "02/27/25", dueDate: "", finishDate: "02/28/25", lastUpdate: "" },
+  { id: "34", item: "Revive scrap control program", owner: "Joel/Jorge", comment: "Done", status: "Done", assignedDate: "02/27/25", dueDate: "", finishDate: "04/15/25", lastUpdate: "" },
+  { id: "35", item: "Scrap recycle management (Monthly report)", owner: "Elena", comment: "Done", status: "Done", assignedDate: "02/27/25", dueDate: "", finishDate: "03/31/25", lastUpdate: "" },
+  { id: "36", item: "Company organization chart", owner: "Saul", comment: "Done", status: "Done", assignedDate: "02/27/25", dueDate: "", finishDate: "04/02/25", lastUpdate: "" },
+  { id: "37", item: "Max speed project 3 machines per week", owner: "Gustavo", comment: "Ishikawa 2 done, Pinlong 1, A+", status: "Done", assignedDate: "02/27/25", dueDate: "", finishDate: "05/15/25", lastUpdate: "" },
+  { id: "38", item: "B1, B5 machinery reloaction (M1,M2,R2…)", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "02/27/25", dueDate: "", finishDate: "09/30/25", lastUpdate: "" },
+  { id: "39", item: "Calculate B5 Samsung storage capa", owner: "Alfonso", comment: "83K+75K(revmoing the mahine parts) pcs Done", status: "Done", assignedDate: "02/28/25", dueDate: "", finishDate: "03/03/25", lastUpdate: "" },
+  { id: "40", item: "Analyze 1S low productivity", owner: "Joel", comment: "Done. Non-Samsung productivity", status: "Done", assignedDate: "03/03/25", dueDate: "", finishDate: "03/12/25", lastUpdate: "" },
+  { id: "41", item: "Boiler softening sys.", owner: "Carlos/Antonio", comment: "Done", status: "Done", assignedDate: "03/03/25", dueDate: "", finishDate: "03/25/25", lastUpdate: "" },
+  { id: "42", item: "Corr. sillter-scorerer/cutter clean-cut calibration training", owner: "Enrique / Arturo", comment: "Done", status: "Done", assignedDate: "03/03/25", dueDate: "", finishDate: "05/25/25", lastUpdate: "" },
+  { id: "43", item: "Isowa 3 - 3 colors repair", owner: "Enrique/Joel/Antonio", comment: "Anilox roll in repair 6-May arrived", status: "Done", assignedDate: "03/03/25", dueDate: "", finishDate: "05/13/25", lastUpdate: "" },
+  { id: "44", item: "Removing pallet on conveyor", owner: "Vincent/Enrique", comment: "minimizing", status: "Done", assignedDate: "03/11/25", dueDate: "", finishDate: "03/19/25", lastUpdate: "" },
+  { id: "45", item: "Hisense/Foxconn TV box stitching possibility", owner: "Imelda", comment: "Done", status: "Done", assignedDate: "03/11/25", dueDate: "", finishDate: "03/19/25", lastUpdate: "" },
+  { id: "46", item: "Chanzong / PL Gluer TV Box adoption", owner: "Enrique/Antonio", comment: "Failed", status: "Failed", assignedDate: "03/11/25", dueDate: "", finishDate: "07/22/25", lastUpdate: "" },
+  { id: "47", item: "C2 PLC Backup", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "03/11/25", dueDate: "", finishDate: "03/25/25", lastUpdate: "" },
+  { id: "48", item: "Connect C1 display", owner: "Mr.Oh", comment: "Done", status: "Done", assignedDate: "03/11/25", dueDate: "", finishDate: "03/19/25", lastUpdate: "" },
+  { id: "49", item: "Install camera on squaring part/ display In feeder for all flexo machine", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "03/11/25", dueDate: "", finishDate: "06/25/25", lastUpdate: "" },
+  { id: "50", item: "Isowa 3 anvil cover consumption analyze", owner: "Joel / Arturo", comment: "Operators were not rotating the anvilcover. Done", status: "Done", assignedDate: "03/12/25", dueDate: "", finishDate: "03/13/25", lastUpdate: "" },
+  { id: "51", item: "Max speed Ichikawa mini W12", owner: "Gustavo", comment: "Done", status: "Done", assignedDate: "03/12/25", dueDate: "", finishDate: "04/16/25", lastUpdate: "" },
+  { id: "52", item: "Check master on flap cut change in Samsung for taping", owner: "Andres", comment: "Done", status: "Done", assignedDate: "03/13/25", dueDate: "", finishDate: "03/13/25", lastUpdate: "" },
+  { id: "53", item: "Calculate A1 repair cost", owner: "Enrique / Antonio", comment: "Canceled", status: "Canceled", assignedDate: "03/14/25", dueDate: "", finishDate: "07/03/25", lastUpdate: "" },
+  { id: "54", item: "Checking the Chinese 4-fork where we used it", owner: "Enrique", comment: "4 installed, 2 are in warehouse. Done", status: "Done", assignedDate: "03/14/25", dueDate: "", finishDate: "03/13/25", lastUpdate: "" },
+  { id: "55", item: "B2 operational meeting", owner: "Joel", comment: "Done", status: "Done", assignedDate: "03/21/25", dueDate: "", finishDate: "03/25/25", lastUpdate: "" },
+  { id: "56", item: "Modification of M5 to run TV box", owner: "Enrique/Arturo", comment: "Good for lamina width over 850mm Now folding section is too dirty. Missing test again with Samsung", status: "delayed", assignedDate: "03/21/25", dueDate: "03/20/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "57", item: "Statategy for chinsese TV box production", owner: "Gustavo", comment: "Done", status: "Done", assignedDate: "03/21/25", dueDate: "", finishDate: "03/24/25", lastUpdate: "" },
+  { id: "58", item: "CTP Issue solution", owner: "Joel/Antonio", comment: "Done", status: "Done", assignedDate: "03/21/25", dueDate: "", finishDate: "03/24/25", lastUpdate: "" },
+  { id: "59", item: "PCC claim", owner: "Vincent", comment: "Done", status: "Done", assignedDate: "03/24/25", dueDate: "", finishDate: "03/24/25", lastUpdate: "" },
+  { id: "60", item: "Pinlong 2 automatic register", owner: "Enrique/Gustavo", comment: "Had meeting with China, but couldn't solve it 21 MAY ARRIVE TECNITIAN", status: "Done", assignedDate: "03/27/25", dueDate: "", finishDate: "05/21/25", lastUpdate: "" },
+  { id: "61", item: "C4 layout", owner: "Enrique/Gustavo", comment: "Done", status: "Done", assignedDate: "03/27/25", dueDate: "", finishDate: "04/02/25", lastUpdate: "" },
+  { id: "62", item: "Hisense transfer rate", owner: "Gustavo/Jorge", comment: "No more material. 62.8% transferrate. No clear explanation", status: "Done", assignedDate: "03/27/25", dueDate: "", finishDate: "04/15/25", lastUpdate: "" },
+  { id: "63", item: "C1 safety bar / brush installation by W16", owner: "Enrique / Arturo", comment: "Safety bar is ready, brush arrived 6-May thu  15 may", status: "Done", assignedDate: "04/09/25", dueDate: "", finishDate: "05/17/25", lastUpdate: "" },
+  { id: "64", item: "TCY Hoist / catwalk installation", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "04/09/25", dueDate: "", finishDate: "07/03/25", lastUpdate: "" },
+  { id: "65", item: "Find way to use 3\" core paper in C1 / C2", owner: "Enrique", comment: "C1 no problem. C2 Check roll--pickup system with manufacturer", status: "Done", assignedDate: "04/21/25", dueDate: "", finishDate: "05/12/25", lastUpdate: "" },
+  { id: "66", item: "Plant turn off procedure", owner: "Gustavo/Rafael", comment: "W20 finish indentifying switches. Check 21-May if it's finished", status: "Done", assignedDate: "04/21/25", dueDate: "", finishDate: "05/21/25", lastUpdate: "" },
+  { id: "67", item: "SAMEX DA old model consumption negotiation", owner: "Mr.Oh", comment: "Done", status: "Done", assignedDate: "04/30/25", dueDate: "", finishDate: "05/21/25", lastUpdate: "" },
+  { id: "68", item: "Organizing pallet businees task force", owner: "Rafael", comment: "Done", status: "Done", assignedDate: "04/30/25", dueDate: "", finishDate: "05/08/25", lastUpdate: "" },
+  { id: "69", item: "C3 testing, PLC GLUNG SYSTEM CHECK", owner: "Hermen/Carlos", comment: "Canceled", status: "Canceled", assignedDate: "05/19/25", dueDate: "", finishDate: "11/21/25", lastUpdate: "" },
+  { id: "70", item: "C4 INSTALATTION BY AUGUST 15TH", owner: "Enrique", comment: "Canceled", status: "Canceled", assignedDate: "05/19/25", dueDate: "", finishDate: "08/27/25", lastUpdate: "" },
+  { id: "71", item: "SHINKO-ALPHA INSTALATION AUGUST 15TH", owner: "Enrique", comment: "Needs to test banding machine, misses infeed convyeor.", status: "delayed", assignedDate: "05/19/25", dueDate: "03/02/26", finishDate: "", lastUpdate: "03/02/26" },
+  { id: "72", item: "MARTIN 4 MOVEMENT TO ASTRA", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "05/19/25", dueDate: "", finishDate: "07/22/25", lastUpdate: "" },
+  { id: "73", item: "Stock repair", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "05/26/25", dueDate: "", finishDate: "06/11/25", lastUpdate: "" },
+  { id: "74", item: "Movment of Potdevin", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "05/29/25", dueDate: "", finishDate: "06/17/25", lastUpdate: "" },
+  { id: "75", item: "Find label-pucnching machine", owner: "Joel", comment: "Scrapped", status: "Done", assignedDate: "05/29/25", dueDate: "", finishDate: "05/29/25", lastUpdate: "" },
+  { id: "76", item: "Making 3 big fans for lamina dry", owner: "Arturo / Hermen", comment: "Done", status: "Done", assignedDate: "06/03/25", dueDate: "", finishDate: "09/11/25", lastUpdate: "" },
+  { id: "77", item: "List up TTD for Mr.Lee and marquip", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "06/19/25", dueDate: "", finishDate: "06/20/25", lastUpdate: "" },
+  { id: "78", item: "Revise of drawing of the fingers C1 CF", owner: "Enrique / Antonio", comment: "Done", status: "Done", assignedDate: "07/03/25", dueDate: "", finishDate: "08/08/25", lastUpdate: "" },
+  { id: "79", item: "STG 415213 Order", owner: "Imelda", comment: "Done", status: "Done", assignedDate: "07/07/25", dueDate: "", finishDate: "07/09/25", lastUpdate: "" },
+  { id: "80", item: "Label size change analysis", owner: "Antonio / Fabian / Jorge", comment: "6 items analyzed", status: "Done", assignedDate: "07/07/25", dueDate: "", finishDate: "07/18/25", lastUpdate: "" },
+  { id: "81", item: "Repair water pipe P3", owner: "Enrique / Alfonso", comment: "Done", status: "Done", assignedDate: "07/10/25", dueDate: "", finishDate: "07/11/25", lastUpdate: "" },
+  { id: "82", item: "Increase the size of Samsung flap score for 55\" and under", owner: "Jorge / Andres", comment: "Not possible, canceled", status: "Canceled", assignedDate: "07/14/25", dueDate: "", finishDate: "07/17/25", lastUpdate: "" },
+  { id: "83", item: "26998C Rework 17th-July", owner: "Jorge / Joel", comment: "Failed", status: "Done", assignedDate: "07/17/25", dueDate: "", finishDate: "08/29/25", lastUpdate: "" },
+  { id: "84", item: "Finish installation of scrap line in extensiona area", owner: "Antonio", comment: "Done", status: "Done", assignedDate: "07/17/25", dueDate: "", finishDate: "01/19/26", lastUpdate: "" },
+  { id: "85", item: "Reprot the progress of Packaging change for Samsung", owner: "Gustavo/Rafael/Jorge", comment: "Done", status: "Done", assignedDate: "07/31/25", dueDate: "", finishDate: "08/28/25", lastUpdate: "" },
+  { id: "86", item: "Forflift reduce project", owner: "Gustavo/Hermen", comment: "ETA end of May", status: "delayed", assignedDate: "08/01/25", dueDate: "04/24/26", finishDate: "", lastUpdate: "02/27/26" },
+  { id: "87", item: "List up Critical sapre parts for Corrugators", owner: "Julio", comment: "plan shared 25-Mar", status: "delayed", assignedDate: "08/06/25", dueDate: "03/15/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "88", item: "Finish installation of scrap line in P1", owner: "Enrique", comment: "Needs to connect blower", status: "delayed", assignedDate: "07/17/25", dueDate: "03/12/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "89", item: "Contact sauer system to change C2 score", owner: "Hermen/Antonio", comment: "PO placed mid-May ETA", status: "delayed", assignedDate: "08/28/25", dueDate: "", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "90", item: "Clean out Lamina sales material", owner: "Imelda/Vincent", comment: "Done", status: "Done", assignedDate: "08/28/25", dueDate: "", finishDate: "12/01/25", lastUpdate: "" },
+  { id: "91", item: "Jumbos setup time reduce project", owner: "Arturo", comment: "SMED phase 5 Documenting", status: "delayed", assignedDate: "08/29/25", dueDate: "03/16/26", finishDate: "", lastUpdate: "03/04/26" },
+  { id: "92", item: "Fix jumbos DC cylinder broken holes", owner: "Enrique", comment: "Sansan comes end-Mar", status: "delayed", assignedDate: "08/29/25", dueDate: "TBD", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "93", item: "Buy knives for Slitter", owner: "Hermen/Antonio", comment: "Canceled", status: "Canceled", assignedDate: "09/04/25", dueDate: "03/02/26", finishDate: "03/06/26", lastUpdate: "" },
+  { id: "94", item: "foxconn production result review X50045371", owner: "Andres", comment: "Done", status: "Done", assignedDate: "09/11/25", dueDate: "", finishDate: "09/15/25", lastUpdate: "" },
+  { id: "95", item: "proceed M2 scrap", owner: "Elena", comment: "Canceled", status: "Canceled", assignedDate: "09/11/25", dueDate: "", finishDate: "09/18/25", lastUpdate: "" },
+  { id: "96", item: "Hourly DO report in the night shift", owner: "Joel", comment: "Done", status: "Done", assignedDate: "09/11/25", dueDate: "", finishDate: "09/11/25", lastUpdate: "" },
+  { id: "97", item: "Ask sauer system visit", owner: "Antonio", comment: "Done", status: "Done", assignedDate: "09/11/25", dueDate: "", finishDate: "10/28/25", lastUpdate: "" },
+  { id: "98", item: "Improvement on waste water control", owner: "Alejandro/Hermen", comment: "Done", status: "Done", assignedDate: "09/17/25", dueDate: "", finishDate: "01/15/26", lastUpdate: "" },
+  { id: "99", item: "Fix Jumbos stacker", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "09/17/25", dueDate: "03/11/26", finishDate: "03/11/26", lastUpdate: "" },
+  { id: "100", item: "Sell M1 & M2", owner: "Arturo / Enrique", comment: "Canceled", status: "Canceled", assignedDate: "09/18/25", dueDate: "", finishDate: "10/16/25", lastUpdate: "" },
+  { id: "101", item: "Making training schedule", owner: "Alejandro/Joel", comment: "Done", status: "Done", assignedDate: "09/23/25", dueDate: "", finishDate: "12/09/25", lastUpdate: "" },
+  { id: "102", item: "Use industrial standar paper combination", owner: "Amy", comment: "Done", status: "Done", assignedDate: "09/23/25", dueDate: "", finishDate: "09/23/25", lastUpdate: "" },
+  { id: "103", item: "Making sure paper change on orders", owner: "Arturo", comment: "Done", status: "Done", assignedDate: "09/23/25", dueDate: "", finishDate: "09/26/25", lastUpdate: "" },
+  { id: "104", item: "Sharing all resistence test result", owner: "Jorge", comment: "Done", status: "Done", assignedDate: "09/23/25", dueDate: "", finishDate: "09/26/25", lastUpdate: "" },
+  { id: "105", item: "Finish rewrok material", owner: "Omar", comment: "Done", status: "Done", assignedDate: "09/24/25", dueDate: "", finishDate: "12/15/25", lastUpdate: "" },
+  { id: "106", item: "Make DC bolt & Slotter knife storage", owner: "Joel", comment: "Done", status: "Done", assignedDate: "10/06/25", dueDate: "", finishDate: "12/01/25", lastUpdate: "" },
+  { id: "107", item: "Report training material to Mr.Kim", owner: "Joel", comment: "Innovation, design updated.", status: "delayed", assignedDate: "10/06/25", dueDate: "TBD", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "108", item: "Run labeling machine horizontal", owner: "Omar", comment: "Done", status: "Done", assignedDate: "10/06/25", dueDate: "02/26/26", finishDate: "02/26/26", lastUpdate: "" },
+  { id: "109", item: "Make cradle for conveyors", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "10/06/25", dueDate: "", finishDate: "01/28/26", lastUpdate: "" },
+  { id: "110", item: "Show production result of Rework", owner: "Arturo/Vincent", comment: "Done", status: "Done", assignedDate: "10/06/25", dueDate: "04/02/26", finishDate: "04/02/26", lastUpdate: "" },
+  { id: "111", item: "Report forklift problems", owner: "Hermen/Antonio", comment: "Done", status: "Done", assignedDate: "10/06/25", dueDate: "", finishDate: "10/30/25", lastUpdate: "" },
+  { id: "112", item: "Put ID of WIP material", owner: "Gustavo/Vincent", comment: "Done", status: "Done", assignedDate: "10/06/25", dueDate: "", finishDate: "11/21/25", lastUpdate: "" },
+  { id: "113", item: "Take photo unitizer & conveyor", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "10/16/25", dueDate: "", finishDate: "10/27/25", lastUpdate: "" },
+  { id: "114", item: "Make plan to install converyor", owner: "Enrique", comment: "ETA end of May", status: "delayed", assignedDate: "10/16/25", dueDate: "04/24/26", finishDate: "", lastUpdate: "02/27/26" },
+  { id: "115", item: "Make one good stock machine", owner: "Enrique", comment: "Canceled", status: "Canceled", assignedDate: "10/16/25", dueDate: "", finishDate: "04/02/26", lastUpdate: "" },
+  { id: "116", item: "Assign safety(fire) follow-up", owner: "Rafael", comment: "Done", status: "Done", assignedDate: "10/20/25", dueDate: "", finishDate: "10/30/25", lastUpdate: "" },
+  { id: "117", item: "Finish Dua Lipa rwk", owner: "Gustavo", comment: "Done", status: "Done", assignedDate: "10/21/25", dueDate: "", finishDate: "10/27/25", lastUpdate: "" },
+  { id: "118", item: "TCY infeed conveyor installation", owner: "Enrique / Gustavo", comment: "Done", status: "Done", assignedDate: "10/27/25", dueDate: "", finishDate: "01/19/26", lastUpdate: "" },
+  { id: "119", item: "Analyze Pinlong 1 & 2 low prod", owner: "Gustavo", comment: "Done", status: "Done", assignedDate: "10/27/25", dueDate: "", finishDate: "01/19/26", lastUpdate: "" },
+  { id: "120", item: "Confirm Woory claim", owner: "Antonio", comment: "Done", status: "Done", assignedDate: "10/27/25", dueDate: "", finishDate: "01/19/26", lastUpdate: "" },
+  { id: "121", item: "Move PL gluer to P1", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "10/30/25", dueDate: "", finishDate: "01/19/26", lastUpdate: "" },
+  { id: "122", item: "C3 & C4 consolidation plan", owner: "Gustavo", comment: "Done", status: "Done", assignedDate: "11/03/25", dueDate: "", finishDate: "11/25/25", lastUpdate: "" },
+  { id: "123", item: "look for the 15t forktruck", owner: "Antonio", comment: "Done", status: "Done", assignedDate: "11/03/25", dueDate: "02/18/26", finishDate: "02/18/26", lastUpdate: "" },
+  { id: "124", item: "TCY stitching solution", owner: "Enrique / Gustavo", comment: "Canceled", status: "Canceled", assignedDate: "11/04/25", dueDate: "", finishDate: "04/02/26", lastUpdate: "" },
+  { id: "125", item: "Summarize compressor spec", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "11/05/25", dueDate: "", finishDate: "11/26/25", lastUpdate: "" },
+  { id: "126", item: "Buy used Slitter machine", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "11/05/25", dueDate: "02/21/26", finishDate: "03/13/26", lastUpdate: "" },
+  { id: "127", item: "Monitoring system production", owner: "Vincent", comment: "Done", status: "Done", assignedDate: "11/05/25", dueDate: "", finishDate: "12/16/25", lastUpdate: "" },
+  { id: "128", item: "Compare labor expense", owner: "Alejandro", comment: "Done", status: "Done", assignedDate: "11/05/25", dueDate: "", finishDate: "11/13/25", lastUpdate: "" },
+  { id: "129", item: "investigate competitor Samsung TV Box", owner: "Omar", comment: "Done", status: "Done", assignedDate: "11/13/25", dueDate: "", finishDate: "12/08/25", lastUpdate: "" },
+  { id: "130", item: "Production organization plan", owner: "Omar/Fabian/Vincent", comment: "Done", status: "Done", assignedDate: "11/20/25", dueDate: "", finishDate: "12/08/25", lastUpdate: "" },
+  { id: "131", item: "Machine review meeting", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "11/20/25", dueDate: "", finishDate: "11/21/25", lastUpdate: "" },
+  { id: "132", item: "Improve LP Gas management", owner: "\\", comment: "Done", status: "Done", assignedDate: "12/08/25", dueDate: "02/18/26", finishDate: "02/18/26", lastUpdate: "" },
+  { id: "133", item: "Check Alpha knive issue", owner: "Enrique", comment: "Done", status: "Done", assignedDate: "12/08/25", dueDate: "", finishDate: "12/09/25", lastUpdate: "" },
+  { id: "134", item: "Summarize Ink problem P2", owner: "Fabian", comment: "Done", status: "Done", assignedDate: "12/08/25", dueDate: "", finishDate: "12/11/25", lastUpdate: "" },
+  { id: "135", item: "Follow up Sauer visit", owner: "Hermen", comment: "Pending decision", status: "delayed", assignedDate: "12/08/25", dueDate: "03/02/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "136", item: "Schedule physical inv audit", owner: "Elena", comment: "Done", status: "Done", assignedDate: "12/08/25", dueDate: "", finishDate: "12/10/25", lastUpdate: "" },
+  { id: "137", item: "M3 finish installation", owner: "Hermen / Omar", comment: "Done", status: "Done", assignedDate: "12/01/24", dueDate: "", finishDate: "01/09/26", lastUpdate: "" },
+  { id: "138", item: "M-DRO finish installation", owner: "Enrique", comment: "Needs 19 days", status: "delayed", assignedDate: "06/23/25", dueDate: "TBD", finishDate: "", lastUpdate: "02/27/26" },
+  { id: "139", item: "TCY folding section repair", owner: "Hermen", comment: "Moving sensor positon", status: "delayed", assignedDate: "12/10/25", dueDate: "03/02/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "140", item: "Schedule physical inv audit", owner: "Elena", comment: "Done", status: "Done", assignedDate: "12/08/25", dueDate: "", finishDate: "12/10/25", lastUpdate: "" },
+  { id: "141", item: "Ward finish installation", owner: "Enrique", comment: "Needs Boom", status: "delayed", assignedDate: "11/10/25", dueDate: "03/09/26", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "142", item: "Improve trim channel flexo", owner: "Julio/Antonio", comment: "Done", status: "Done", assignedDate: "01/07/26", dueDate: "03/17/26", finishDate: "03/17/26", lastUpdate: "" },
+  { id: "143", item: "V-board paper standard", owner: "Joel", comment: "Done", status: "Done", assignedDate: "01/12/26", dueDate: "03/09/26", finishDate: "03/09/26", lastUpdate: "" },
+  { id: "144", item: "Pinlong 2 low prod analysis", owner: "Omar", comment: "Done", status: "Done", assignedDate: "01/13/26", dueDate: "02/10/26", finishDate: "02/10/26", lastUpdate: "" },
+  { id: "145", item: "Ichikawa mini 3 colors", owner: "Hermen/Antonio", comment: "Clutch Mid-Apr", status: "delayed", assignedDate: "01/13/26", dueDate: "02/23/26", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "146", item: "Isowa 3 3 colors", owner: "Hermen", comment: "repair of Rolls", status: "delayed", assignedDate: "01/13/26", dueDate: "03/09/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "147", item: "Distribute slotting knives", owner: "Joel/Arturo", comment: "2-Apr place Racks", status: "delayed", assignedDate: "01/16/26", dueDate: "TBD", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "148", item: "Fill up knive shortage", owner: "Antonio", comment: "proceed 6-Apr", status: "delayed", assignedDate: "01/16/26", dueDate: "TBD", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "149", item: "Review alternative fuel", owner: "Antonio", comment: "Done", status: "Done", assignedDate: "01/21/26", dueDate: "02/24/26", finishDate: "02/24/26", lastUpdate: "" },
+  { id: "150", item: "Boiler 2 repair", owner: "Antonio", comment: "8-Apr test", status: "delayed", assignedDate: "01/21/26", dueDate: "04/04/26", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "151", item: "Chinese 2pcs TV Box process", owner: "Joel", comment: "Done", status: "Done", assignedDate: "01/27/26", dueDate: "03/09/26", finishDate: "03/09/26", lastUpdate: "" },
+  { id: "152", item: "Install infeed lamina pusher", owner: "Joel", comment: "Reviewing", status: "delayed", assignedDate: "01/28/26", dueDate: "02/17/26", finishDate: "", lastUpdate: "03/04/26" },
+  { id: "153", item: "Move all roll slitters to P5", owner: "Hermen", comment: "Layout 3-Apr", status: "delayed", assignedDate: "02/09/26", dueDate: "03/09/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "154", item: "Fix v-board roll feeder", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "02/12/26", dueDate: "02/20/26", finishDate: "02/20/26", lastUpdate: "" },
+  { id: "155", item: "Pinlong 1 & 2 productivity", owner: "Arturo", comment: "clean anilox 12-Apr", status: "delayed", assignedDate: "02/18/26", dueDate: "03/11/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "156", item: "Uninstall Langston", owner: "Hermen", comment: "Canceled", status: "Canceled", assignedDate: "02/18/26", dueDate: "03/11/26", finishDate: "03/11/26", lastUpdate: "" },
+  { id: "157", item: "List up operators", owner: "Omar", comment: "Done", status: "Done", assignedDate: "02/19/26", dueDate: "02/25/26", finishDate: "02/26/26", lastUpdate: "" },
+  { id: "158", item: "Check pull roll status", owner: "Arturo", comment: "Missing Langston...", status: "delayed", assignedDate: "02/19/26", dueDate: "03/05/26", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "159", item: "Check Pallet jack use", owner: "Omar", comment: "Done", status: "Done", assignedDate: "02/24/26", dueDate: "03/03/26", finishDate: "03/03/26", lastUpdate: "" },
+  { id: "160", item: "Finish all machine Painting", owner: "Joel", comment: "restart 11-Apr", status: "delayed", assignedDate: "02/24/26", dueDate: "03/31/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "161", item: "Complete v-board parts", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "02/26/26", dueDate: "03/11/26", finishDate: "03/11/26", lastUpdate: "" },
+  { id: "162", item: "Recover 27103B", owner: "Omar", comment: "Done", status: "Done", assignedDate: "03/02/26", dueDate: "03/09/26", finishDate: "03/09/26", lastUpdate: "" },
+  { id: "163", item: "Make 3 valco machiens", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "03/02/26", dueDate: "03/17/26", finishDate: "03/17/26", lastUpdate: "" },
+  { id: "164", item: "C3/C4 project", owner: "Hermen/Carlos", comment: "W15 starts", status: "delayed", assignedDate: "03/02/26", dueDate: "03/03/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "165", item: "Floor paint within March", owner: "Hermen", comment: "W15 Ward area", status: "delayed", assignedDate: "03/02/26", dueDate: "03/31/26", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "166", item: "Fix v-board banding", owner: "Hermen", comment: "req made", status: "delayed", assignedDate: "03/05/26", dueDate: "", finishDate: "", lastUpdate: "03/17/26" },
+  { id: "167", item: "Analyze Peeling issue", owner: "Omar/Jorge", comment: "Done", status: "Done", assignedDate: "03/06/26", dueDate: "03/09/26", finishDate: "03/09/26", lastUpdate: "" },
+  { id: "168", item: "Solve pre-folding", owner: "Andres/Joel", comment: "visual aid", status: "delayed", assignedDate: "03/12/26", dueDate: "", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "169", item: "Scrap control", owner: "Joel/Jorge", comment: "starts 31-Mar", status: "delayed", assignedDate: "03/12/26", dueDate: "", finishDate: "", lastUpdate: "03/27/26" },
+  { id: "170", item: "Report power conveyor", owner: "Joel", comment: "Done", status: "Done", assignedDate: "03/12/26", dueDate: "04/02/26", finishDate: "04/02/26", lastUpdate: "" },
+  { id: "171", item: "Activate Oscillation", owner: "Hermen", comment: "7-Apr install", status: "delayed", assignedDate: "03/13/26", dueDate: "", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "172", item: "Review Anvil cover", owner: "Arturo", comment: "Done", status: "Done", assignedDate: "03/13/26", dueDate: "04/01/26", finishDate: "04/01/26", lastUpdate: "" },
+  { id: "173", item: "Boiler 1 preheater", owner: "Hermen", comment: "Done", status: "Done", assignedDate: "03/18/26", dueDate: "03/27/26", finishDate: "03/27/26", lastUpdate: "" },
+  { id: "174", item: "Replace sludge tank", owner: "Hermen", comment: "W14 supplier checked", status: "delayed", assignedDate: "03/18/26", dueDate: "", finishDate: "", lastUpdate: "04/01/26" },
+  { id: "175", item: "Replace pull roll", owner: "Hermen", comment: "Internal repair", status: "delayed", assignedDate: "03/18/26", dueDate: "", finishDate: "", lastUpdate: "03/20/26" },
+  { id: "176", item: "Youbond lableing glue", owner: "Antonio", comment: "importation fee", status: "delayed", assignedDate: "03/20/26", dueDate: "", finishDate: "", lastUpdate: "03/20/26" },
+  { id: "177", item: "Purchase Boom", owner: "Antonio", comment: "waiting video", status: "delayed", assignedDate: "03/20/26", dueDate: "", finishDate: "", lastUpdate: "03/20/26" },
+  { id: "178", item: "pipe dream forklift", owner: "Hermen", comment: "working", status: "delayed", assignedDate: "03/20/26", dueDate: "", finishDate: "", lastUpdate: "03/20/26" },
+  { id: "179", item: "Fix Rotary Shear C1", owner: "Hermen", comment: "", status: "delayed", assignedDate: "04/01/26", dueDate: "", finishDate: "", lastUpdate: "" },
+  { id: "180", item: "Fix Rotary Shear C2", owner: "Hermen", comment: "BHS trans", status: "delayed", assignedDate: "04/01/26", dueDate: "", finishDate: "", lastUpdate: "" },
+  { id: "181", item: "PL1/PL2 DC cylinder", owner: "Hermen", comment: "req bolts", status: "delayed", assignedDate: "04/01/26", dueDate: "", finishDate: "", lastUpdate: "" },
+  { id: "182", item: "Fix Signode", owner: "Julio/Hermen", comment: "consumable", status: "delayed", assignedDate: "04/02/26", dueDate: "", finishDate: "", lastUpdate: "" }
+];
+
+// --- Helper Functions ---
+const getAbsDate = (dateStr) => {
+  if (!dateStr || dateStr === "TBD" || dateStr === "N/A" || dateStr === "-" || dateStr.trim() === "") return null;
+  if (dateStr.includes('/')) {
+    const parts = dateStr.split('/');
+    if (parts.length === 3) {
+      let month = parseInt(parts[0]) - 1;
+      let day = parseInt(parts[1]);
+      let year = parseInt(parts[2]);
+      if (year < 100) year += 2000;
+      return new Date(year, month, day);
+    }
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return new Date(dateStr);
+  const d = new Date(dateStr);
+  return isNaN(d.getTime()) ? null : d;
+};
+
+const formatDisplayDate = (dateStr) => {
+  const d = getAbsDate(dateStr);
+  if (!d) return dateStr || "N/A";
+  return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+};
+
+const toYMD = (dateStr) => {
+  const d = getAbsDate(dateStr);
+  if (!d) return "";
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const getStatusColor = (status) => {
+  switch (status) {
+    case 'Done': return '#10b981';
+    case 'on track': return '#3b82f6';
+    case 'delayed': return '#ef4444';
+    case 'Hold': return '#f59e0b';
+    case 'Failed': return '#0f172a';
+    case 'Canceled': return '#94a3b8';
+    default: return '#cbd5e1';
+  }
+};
+
+const App = () => {
+  const [user, setUser] = useState(null);
+  const [tasks, setTasks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedStatuses, setSelectedStatuses] = useState(["on track", "delayed", "Hold"]);
+  const [selectedOwners, setSelectedOwners] = useState([]);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [showLoginModal, setShowLoginModal] = useState(false);
+  const [password, setPassword] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [selectedUserView, setSelectedUserView] = useState(null);
+  const [expandedCategory, setExpandedCategory] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' });
+
+  // --- 1. Authentication ---
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { 
+        console.error("Auth failed:", err);
+        setLoading(false);
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, setUser);
+    return () => unsubscribe();
+  }, []);
+
+  // --- 2. Firestore Sync & Initialization ---
+  useEffect(() => {
+    if (!user) return;
+
+    const tasksCollection = collection(db, 'artifacts', appId, 'public', 'data', 'tasks');
+
+    const checkAndInitDB = async () => {
+      const q = query(tasksCollection);
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) {
+        console.log("Initializing DB with master data...");
+        for (const task of masterTasksData) {
+          await setDoc(doc(tasksCollection, task.id), task);
+        }
+      }
+    };
+    checkAndInitDB();
+
+    const unsubscribe = onSnapshot(tasksCollection, 
+      (snapshot) => {
+        const data = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+        setTasks(data);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Firestore sync error:", error);
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, [user]);
+
+  // --- 3. UI Fixes: Admin Scroll ---
+  useEffect(() => {
+    if (isAdmin) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [isAdmin]);
+
+  // --- 4. Logic & Calculations ---
+  const computedTasks = useMemo(() => {
+    return tasks.map(task => {
+      let status = (task.status === "Finished" || task.status === "Done") ? "Done" : task.status;
+      const isManual = ["Done", "Hold", "Failed", "Canceled"].includes(status);
+      const dueDateObj = getAbsDate(task.dueDate);
+      if (!isManual) {
+        if (dueDateObj && dueDateObj < TODAY) status = "delayed";
+        else status = "on track";
+      }
+      const assigned = getAbsDate(task.assignedDate);
+      const finished = getAbsDate(task.finishDate);
+      let calcDays = 0;
+      if (assigned) {
+        if (["Done", "Failed", "Canceled"].includes(status)) {
+          calcDays = finished ? Math.floor((finished - assigned) / (1000 * 60 * 60 * 24)) : Math.floor((TODAY - assigned) / (1000 * 60 * 60 * 24));
+        } else {
+          calcDays = Math.floor((TODAY - assigned) / (1000 * 60 * 60 * 24));
+        }
+      }
+      return { ...task, displayStatus: status, calcDaysLapsed: Math.max(0, calcDays) };
+    });
+  }, [tasks]);
+
+  const globalOwnerStats = useMemo(() => {
+    const statsMap = {};
+    const openStatuses = ['on track', 'delayed', 'Hold'];
+    const closedStatuses = ['Done', 'Failed', 'Canceled'];
+    computedTasks.forEach(task => {
+      const owners = task.owner?.split(/[&,/]/).map(o => o.trim()) || [];
+      const isOpen = openStatuses.includes(task.displayStatus);
+      const isClosed = closedStatuses.includes(task.displayStatus);
+      owners.forEach(o => {
+        if (o && o !== "\\" && o !== "-" && o !== "Assignee") {
+          if (!statsMap[o]) statsMap[o] = { total: 0, open: 0, closed: 0, totalDaysLapsed: 0, avgLeadTime: 0 };
+          statsMap[o].total += 1;
+          statsMap[o].totalDaysLapsed += (task.calcDaysLapsed || 0);
+          if (isClosed) statsMap[o].closed += 1;
+          else if (isOpen) statsMap[o].open += 1;
+        }
+      });
+    });
+    Object.keys(statsMap).forEach(name => {
+      const data = statsMap[name];
+      data.avgLeadTime = data.total > 0 ? Math.round(data.totalDaysLapsed / data.total) : 0;
+    });
+    return statsMap;
+  }, [computedTasks]);
+
+  const sortedAndFilteredTasks = useMemo(() => {
+    let items = computedTasks.filter(task => {
+      const matchesSearch = task.item?.toLowerCase().includes(searchTerm.toLowerCase()) || task.owner?.toLowerCase().includes(searchTerm.toLowerCase()) || String(task.id).includes(searchTerm);
+      const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(task.displayStatus);
+      const matchesOwner = selectedOwners.length === 0 || selectedOwners.some(o => task.owner?.toLowerCase().includes(o.toLowerCase()));
+      const matchPersonalView = selectedUserView ? task.owner?.split(/[&,/]/).map(n => n.trim()).includes(selectedUserView) : true;
+      return matchesSearch && matchesStatus && matchesOwner && matchPersonalView;
+    });
+    if (sortConfig.direction) {
+      items.sort((a, b) => {
+        let aVal, bVal;
+        switch (sortConfig.key) {
+          case 'id': aVal = Number(a.id); bVal = Number(b.id); break;
+          case 'assignedDate': aVal = getAbsDate(a.assignedDate)?.getTime() || 0; bVal = getAbsDate(b.assignedDate)?.getTime() || 0; break;
+          case 'dueDate': aVal = getAbsDate(a.dueDate)?.getTime() || 0; bVal = getAbsDate(b.dueDate)?.getTime() || 0; break;
+          case 'timeline': aVal = a.calcDaysLapsed; bVal = b.calcDaysLapsed; break;
+          default: aVal = a[sortConfig.key]; bVal = b[sortConfig.key];
+        }
+        if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+    return items;
+  }, [computedTasks, searchTerm, selectedStatuses, selectedOwners, selectedUserView, sortConfig]);
+
+  const displayStats = useMemo(() => {
+    const counts = sortedAndFilteredTasks.reduce((acc, task) => { acc[task.displayStatus] = (acc[task.displayStatus] || 0) + 1; return acc; }, {});
+    const openStatuses = ['on track', 'delayed', 'Hold'];
+    const openCount = openStatuses.reduce((sum, s) => sum + (counts[s] || 0), 0);
+    const ownerArray = Object.entries(globalOwnerStats).map(([name, data]) => ({ name, ...data }));
+    const validLT = ownerArray.filter(o => o.total > 0);
+    return { 
+      counts, total: sortedAndFilteredTasks.length, 
+      avgLeadTime: sortedAndFilteredTasks.length > 0 ? Math.round(sortedAndFilteredTasks.reduce((sum, t) => sum + (t.calcDaysLapsed || 0), 0) / sortedAndFilteredTasks.length) : 0,
+      openCount, closedCount: sortedAndFilteredTasks.length - openCount,
+      performance: {
+        allByClosed: [...ownerArray].sort((a, b) => b.closed - a.closed),
+        allByOpen: [...ownerArray].sort((a, b) => b.open - a.open),
+        allByShortestLT: [...validLT].sort((a, b) => a.avgLeadTime - b.avgLeadTime),
+        allByLongestLT: [...validLT].sort((a, b) => b.avgLeadTime - a.avgLeadTime)
+      }
+    };
+  }, [sortedAndFilteredTasks, globalOwnerStats]);
+
+  const allOwners = useMemo(() => Object.keys(globalOwnerStats).sort(), [globalOwnerStats]);
+
+  // --- 5. CRUD Ops ---
+  const handleUpdate = async (id, field, value) => {
+    if (!isAdmin || !user) return;
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'tasks', String(id));
+    const task = tasks.find(t => String(t.id) === String(id));
+    if (!task) return;
+    try {
+      await setDoc(docRef, { ...task, [field]: value, lastUpdate: TODAY_STR }, { merge: true });
+    } catch (err) { console.error("Update error:", err); }
+  };
+
+  const handleAddTask = async () => {
+    if (!isAdmin || !user) return;
+    const nextId = tasks.length > 0 ? Math.max(...tasks.map(t => Number(t.id))) + 1 : 1;
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', String(nextId)), {
+      id: String(nextId), item: "New Task", owner: "Assignee", comment: "", status: "on track", assignedDate: TODAY_STR, dueDate: TODAY_STR, finishDate: "", lastUpdate: TODAY_STR
+    });
+  };
+
+  const handleDeleteTask = async (id) => {
+    if (!isAdmin || !user) return;
+    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'tasks', String(id)));
+    setDeleteConfirmId(null);
+  };
+
+  const handleLogin = () => {
+    if (password === "0424") {
+      setIsAdmin(true);
+      setShowLoginModal(false);
+      setPassword("");
+    }
+  };
+
+  // --- Components ---
+  const AccordionCard = ({ title, icon, data, type, categoryId }) => {
+    const isExpanded = expandedCategory === categoryId;
+    const displayList = isExpanded ? data : data.slice(0, 3);
+    const colors = { shortestLT: "bg-emerald-50/50 border-emerald-100 text-emerald-600", longestLT: "bg-red-50/50 border-red-100 text-red-600", closer: "bg-blue-50/50 border-blue-100 text-blue-600", open: "bg-amber-50/50 border-amber-100 text-amber-600" }[type];
+    return (
+      <div className={`${colors} border p-4 rounded-2xl shadow-sm transition-all flex flex-col h-fit`}>
+        <div className="flex items-center justify-between mb-3"><p className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-1">{icon} {title}</p></div>
+        <div className={`space-y-1.5 overflow-hidden transition-all duration-500 ${isExpanded ? 'max-h-[400px] overflow-y-auto' : 'max-h-[120px]'}`}>
+          {displayList.map((p, i) => (
+            <div key={i} className="flex justify-between text-[11px] font-bold text-slate-700 py-1 border-b border-white/40 last:border-0 items-center">
+              <span className="flex items-center gap-2"><span className="text-[9px] text-slate-300 w-3">#{i + 1}</span>{p.name}</span>
+              <span className="font-black">{type.includes('LT') ? `${p.avgLeadTime}d` : p[type === 'closer' ? 'closed' : 'open']}</span>
+            </div>
+          ))}
+        </div>
+        {data.length > 3 && (<button onClick={() => setExpandedCategory(isExpanded ? null : categoryId)} className="mt-4 w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl text-[9px] font-black uppercase border border-transparent hover:border-slate-200 hover:bg-white text-slate-400">{isExpanded ? <>Close <ChevronUp size={12} /></> : <>Show Rank <ChevronDown size={12} /></>}</button>)}
+      </div>
+    );
+  };
+
+  const EditableField = ({ initialValue, onSave, isAdmin, isTextArea = false, isItem = false }) => {
+    const [draft, setDraft] = useState(initialValue || "");
+    const [isEditing, setIsEditing] = useState(false);
+    useEffect(() => { setDraft(initialValue || ""); }, [initialValue]);
+
+    if (!isAdmin) {
+      return isTextArea ? (
+        <p className="w-full text-[14px] text-slate-600 font-medium leading-relaxed whitespace-pre-wrap">{initialValue || "No comment."}</p>
+      ) : (
+        <p className={`text-sm font-bold leading-tight text-slate-800 ${isItem ? 'line-clamp-3 overflow-hidden' : ''}`}>{initialValue}</p>
+      );
+    }
+
+    const hasChanged = draft !== (initialValue || "");
+    // Item의 경우 관리자 모드에서도 3줄까지 볼 수 있도록 textarea를 사용하고 굵은 글씨체 유지
+    const isMultiLine = isTextArea || isItem;
+
+    return (
+      <div className="relative group w-full flex flex-col gap-2">
+        {isMultiLine ? (
+          <textarea 
+            value={draft} 
+            onChange={(e) => { setDraft(e.target.value); setIsEditing(true); }} 
+            className={`w-full bg-transparent outline-none resize-none leading-relaxed border-2 border-transparent focus:border-blue-100 rounded-lg p-1 ${isItem ? 'text-sm font-bold text-slate-800' : 'text-[14px] text-slate-700 font-semibold'}`} 
+            rows={isItem ? 3 : 3} 
+            onFocus={() => setIsEditing(true)} 
+          />
+        ) : (
+          <input 
+            type="text" 
+            value={draft} 
+            onChange={(e) => { setDraft(e.target.value); setIsEditing(true); }} 
+            className="w-full text-xs font-bold bg-slate-50 border-2 border-transparent focus:border-blue-100 rounded-xl p-2 outline-none" 
+            onFocus={() => setIsEditing(true)} 
+          />
+        )}
+        {isEditing && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => { onSave(draft); setIsEditing(false); }} className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase shadow-sm ${hasChanged ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-500'}`} disabled={!hasChanged}><Save size={12} /> Save</button>
+            <button onClick={() => { setDraft(initialValue || ""); setIsEditing(false); }} className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase text-slate-400">Cancel</button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const SortButton = ({ columnKey, label }) => {
+    const isActive = sortConfig.key === columnKey;
+    return (
+      <button onClick={() => { let dir = 'asc'; if (sortConfig.key === columnKey && sortConfig.direction === 'asc') dir = 'desc'; else if (sortConfig.key === columnKey && sortConfig.direction === 'desc') dir = null; setSortConfig({ key: columnKey, direction: dir }); }} className={`flex items-center gap-1.5 transition-colors group ${isActive ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}>
+        <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
+        {isActive ? (sortConfig.direction === 'asc' ? <ArrowUp size={12} strokeWidth={3} /> : <ArrowDown size={12} strokeWidth={3} />) : (<ArrowUpDown size={12} className="opacity-0 group-hover:opacity-100" />)}
+      </button>
+    );
+  };
+
+  const pieData = useMemo(() => {
+    let sa = 0;
+    return STATUS_OPTIONS.map(status => {
+      const c = displayStats.counts[status] || 0;
+      const p = displayStats.total > 0 ? (c / displayStats.total) * 100 : 0;
+      const angle = displayStats.total > 0 ? (c / displayStats.total) * 360 : 0;
+      const data = p > 0 ? { status, color: getStatusColor(status), count: c, percentage: p.toFixed(1), startAngle: sa, angle } : null;
+      sa += angle;
+      return data;
+    }).filter(Boolean);
+  }, [displayStats]);
+
+  return (
+    <div className="min-h-screen bg-slate-100 p-6 font-sans text-slate-900 flex flex-col relative pb-16">
+      <div className="max-w-[1800px] mx-auto w-full mb-6 flex items-center justify-between">
+        <div><h1 className="text-3xl font-black text-slate-800 tracking-tighter mb-1">Sinil Things To Do</h1><p className="text-slate-500 text-sm font-bold uppercase tracking-wider">Cloud Synchronized Dashboard</p></div>
+        <div className="flex items-center gap-4">
+          {isAdmin && <button onClick={handleAddTask} className="text-xs font-black bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-all"><Plus size={16} /> Add Task</button>}
+          {isAdmin ? <button onClick={() => setIsAdmin(false)} className="text-xs font-black bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-all"><Unlock size={16} /> Admin Active</button> : <button onClick={() => setShowLoginModal(true)} className="text-xs font-black bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-all"><LogIn size={16} /> Admin Login</button>}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex-1 flex flex-col items-center justify-center py-40">
+          <Loader2 size={48} className="animate-spin text-blue-500 mb-4 opacity-50" />
+          <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Syncing Data...</p>
+        </div>
+      ) : (
+        <>
+          {!selectedUserView ? (
+            <>
+              <div className="max-w-[1800px] mx-auto w-full mb-6 bg-white p-8 rounded-[2rem] shadow-md border border-slate-200/80">
+                <div className="flex flex-col lg:flex-row gap-8 items-stretch mb-8">
+                  <div className="flex items-center gap-5 lg:pr-8 lg:border-r border-slate-100 flex-shrink-0">
+                    <div className="relative w-28 h-28 flex-shrink-0">
+                      <svg viewBox="0 0 32 32" className="w-full h-full transform -rotate-90">
+                        {pieData.map((slice, i) => {
+                          const x = 16 + 16 * Math.cos((slice.startAngle * Math.PI) / 180);
+                          const y = 16 + 16 * Math.sin((slice.startAngle * Math.PI) / 180);
+                          const endX = 16 + 16 * Math.cos(((slice.startAngle + slice.angle) * Math.PI) / 180);
+                          const endY = 16 + 16 * Math.sin(((slice.startAngle + slice.angle) * Math.PI) / 180);
+                          return <path key={i} d={`M 16 16 L ${x} ${y} A 16 16 0 ${slice.angle > 180 ? 1 : 0} 1 ${endX} ${endY} Z`} fill={slice.color} className="stroke-white stroke-[1.5]" />;
+                        })}
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center bg-white m-5 rounded-full shadow-inner flex-col"><span className="text-[8px] font-black text-slate-400 uppercase">Total</span><span className="text-sm font-black text-slate-800">{displayStats.total}</span></div>
+                    </div>
+                    <div className="w-[140px] max-h-[120px] overflow-y-auto pr-2 space-y-2">
+                      {pieData.map((slice, i) => (<div key={i} className="flex items-center justify-between group"><div className="flex items-center gap-2"><div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: slice.color }}></div><span className="text-[11px] font-bold text-slate-600 uppercase">{slice.status}</span></div><div className="text-right flex items-center gap-1"><span className="text-[11px] font-black text-slate-800">{slice.count}</span><span className="text-[9px] font-bold text-slate-400 w-8 text-right">({slice.percentage}%)</span></div></div>))}
+                    </div>
+                  </div>
+                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-5">
+                    <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-col justify-center text-center shadow-sm"><p className="text-[10px] font-black text-slate-500 uppercase mb-1">Closed Rate</p><p className="text-3xl font-black text-slate-800">{displayStats.total > 0 ? ((displayStats.closedCount / displayStats.total) * 100).toFixed(1) : 0}%</p></div>
+                    <div className="bg-purple-50 p-4 rounded-2xl border border-purple-100 flex flex-col justify-center text-center shadow-sm"><p className="text-[10px] font-black text-slate-500 uppercase mb-1">Avg Lead Time</p><p className="text-3xl font-black text-slate-800">{displayStats.avgLeadTime}d</p></div>
+                    <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 flex flex-col justify-center text-center shadow-sm"><p className="text-[10px] font-black text-slate-500 uppercase mb-1">Open Items</p><p className="text-3xl font-black text-slate-800">{displayStats.openCount}</p></div>
+                  </div>
+                </div>
+                <div className="pt-6 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <AccordionCard title="Fastest LT" icon={<Zap size={10}/>} data={displayStats.performance.allByShortestLT} type="shortestLT" categoryId="shortest" />
+                  <AccordionCard title="Slowest LT" icon={<Snail size={10}/>} data={displayStats.performance.allByLongestLT} type="longestLT" categoryId="longest" />
+                  <AccordionCard title="Top Closer" icon={<Trophy size={10}/>} data={displayStats.performance.allByClosed} type="closer" categoryId="closer" />
+                  <AccordionCard title="Most Open" icon={<Flame size={10}/>} data={displayStats.performance.allByOpen} type="open" categoryId="open" />
+                </div>
+              </div>
+
+              {/* Filters */}
+              <div className="max-w-[1800px] mx-auto w-full mb-6 bg-white shadow-sm border border-slate-200/80 rounded-[2rem] p-5 flex flex-col gap-5">
+                <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+                  <div className="flex flex-col lg:flex-row gap-4 items-center flex-1 w-full">
+                    <div className="relative group min-w-[250px] w-full lg:w-auto"><Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} /><input type="text" placeholder="Search..." className="w-full pl-10 pr-4 py-2.5 bg-slate-50 rounded-xl border border-slate-100 outline-none text-xs font-bold" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
+                    <div className="flex items-center gap-2 overflow-x-auto no-scrollbar w-full lg:w-auto">{STATUS_OPTIONS.map(status => (<button key={status} onClick={() => setSelectedStatuses(prev => prev.includes(status) ? prev.filter(s => s !== status) : [...prev, status])} className={`px-4 py-2 rounded-xl text-[10px] font-black border transition-all flex items-center gap-2 flex-shrink-0 ${selectedStatuses.includes(status) ? 'bg-slate-800 border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-600'}`}><div className="w-2 h-2 rounded-full" style={{ backgroundColor: getStatusColor(status) }} />{status.toUpperCase()}</button>))}</div>
+                  </div>
+                  <button onClick={() => {setSelectedStatuses([]); setSelectedOwners([]); setSearchTerm(""); setSortConfig({ key: 'id', direction: 'asc' });}} className="text-[11px] font-black text-red-500 px-4 py-2 hover:bg-red-50 rounded-xl">Reset</button>
+                </div>
+                <div className="flex items-center gap-4 overflow-x-auto custom-scrollbar pt-4 border-t border-slate-100">
+                  <span className="text-[9px] font-black text-slate-400 uppercase flex-shrink-0">Assignee:</span>
+                  <div className="flex items-center gap-3">{allOwners.map(owner => (<button key={owner} onClick={() => setSelectedOwners(prev => prev.includes(owner) ? prev.filter(o => o !== owner) : [...prev, owner])} className={`flex flex-col items-start px-4 py-2.5 rounded-2xl border transition-all flex-shrink-0 gap-1.5 ${selectedOwners.includes(owner) ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-slate-100'}`}><span className="text-[11px] font-black text-slate-700">{owner}</span><div className="flex items-center gap-2 text-[9px] font-black opacity-80 pt-1.5 w-full border-t border-slate-50"><span className="text-amber-500">{globalOwnerStats[owner]?.open}</span><span className="text-slate-200">|</span><span className="text-emerald-500">{globalOwnerStats[owner]?.closed}</span><span className="text-slate-200">|</span><span className="text-purple-500">{globalOwnerStats[owner]?.avgLeadTime}d</span></div></button>))}</div>
+                </div>
+              </div>
+
+              {/* Table Container */}
+              <div className="max-w-[1800px] mx-auto w-full flex-1 bg-white rounded-[2.5rem] shadow-xl border border-slate-200/60 overflow-hidden flex flex-col">
+                <div className="overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left border-collapse table-fixed">
+                    <thead className="bg-slate-50/80 backdrop-blur-md sticky top-0 z-30 border-b border-slate-200">
+                      <tr>
+                        <th className="px-4 py-4 w-14 text-center"><SortButton columnKey="id" label="ID" /></th>
+                        <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase w-[240px]">Item / Assignee</th>
+                        <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase flex-1">Latest Status Comment</th>
+                        <th className="px-4 py-4 text-[10px] font-black text-slate-400 uppercase w-[115px] text-center">Status</th>
+                        <th className="px-3 py-4 w-[125px]"><div className="flex flex-col items-center gap-1"><SortButton columnKey="assignedDate" label="Assign" /><SortButton columnKey="dueDate" label="Due" /></div></th>
+                        <th className="px-4 py-4 w-[95px] text-center"><SortButton columnKey="timeline" label="Timeline" /></th>
+                        {isAdmin && <th className="px-2 py-4 w-[50px]"></th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {sortedAndFilteredTasks.map((task) => {
+                        const isOverdue = getAbsDate(task.dueDate) && getAbsDate(task.dueDate) < TODAY && !["Done", "Canceled", "Failed"].includes(task.displayStatus);
+                        const statusStyle = { 'Done': 'bg-emerald-500 text-white', 'on track': 'bg-blue-500 text-white', 'delayed': 'bg-red-500 text-white animate-pulse', 'Hold': 'bg-amber-500 text-white', 'Failed': 'bg-slate-900 text-white line-through', 'Canceled': 'bg-slate-300 text-slate-600' };
+                        return (
+                          <tr key={task.id} className="group hover:bg-blue-50/30 transition-all">
+                            <td className="px-4 py-6 text-xs font-black text-slate-300 text-center">#{task.id}</td>
+                            <td className="px-4 py-6"><div className="space-y-3"><EditableField initialValue={task.item} onSave={(val) => handleUpdate(task.id, 'item', val)} isAdmin={isAdmin} isItem={true} /><div className="flex flex-col gap-1.5"><div className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 uppercase"><User size={12} /> Assignee</div><EditableField initialValue={task.owner} onSave={(val) => handleUpdate(task.id, 'owner', val)} isAdmin={isAdmin} /></div></div></td>
+                            <td className="px-6 py-6"><div className={`p-5 rounded-[1.5rem] border transition-all ${isAdmin ? 'bg-slate-50 border-slate-100' : 'bg-white border-transparent shadow-sm'}`}><div className="flex items-start gap-4"><div className="mt-1 p-2.5 bg-white rounded-xl shadow-sm text-blue-500 flex-shrink-0"><MessageSquare size={18} /></div><EditableField initialValue={task.comment} onSave={(val) => handleUpdate(task.id, 'comment', val)} isAdmin={isAdmin} isTextArea={true} /></div></div></td>
+                            <td className="px-4 py-6 text-center"><div className="flex flex-col items-center justify-center gap-1.5">{isAdmin ? (<select value={task.displayStatus} onChange={(e) => handleUpdate(task.id, 'status', e.target.value)} className={`w-full text-[10px] font-black py-2.5 px-2 rounded-xl text-center uppercase cursor-pointer ${statusStyle[task.displayStatus]}`} style={{ backgroundColor: getStatusColor(task.displayStatus) }}>{STATUS_OPTIONS.map(opt => <option key={opt} value={opt}>{opt.toUpperCase()}</option>)}</select>) : (<div className={`w-full text-[10px] font-black py-2.5 px-2 rounded-xl text-center uppercase shadow-sm ${statusStyle[task.displayStatus]}`} style={{ backgroundColor: getStatusColor(task.displayStatus) }}>{task.displayStatus}</div>)}</div></td>
+                            <td className="px-3 py-6"><div className="flex flex-col gap-3"><div className="text-center"><span className="text-[8px] font-bold text-slate-400 uppercase">Assigned</span><div className="text-[10px] font-black px-2 py-1.5 rounded-lg border bg-slate-50 text-slate-600">{formatDisplayDate(task.assignedDate)}</div></div><div className="text-center"><span className="text-[8px] font-bold text-slate-400 uppercase">Due</span><div className={`text-[10px] font-black px-2 py-1.5 rounded-lg border text-center ${isOverdue ? 'bg-red-50 text-red-600 border-red-200' : 'bg-slate-50 text-slate-600 border-slate-100'}`}>{formatDisplayDate(task.dueDate)}</div></div></div></td>
+                            <td className="px-4 py-6 text-center"><div className="flex flex-col items-center gap-0.5"><Timer size={14} className="text-slate-400" /><span className="text-[10px] font-black text-slate-600">{task.calcDaysLapsed}d</span></div></td>
+                            {isAdmin && <td className="px-2 py-6 text-center"><button onClick={() => setDeleteConfirmId(task.id)} className="p-2 text-slate-200 hover:text-red-500 transition-all"><Trash2 size={18} /></button></td>}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          ) : (
+             <div className="max-w-[1800px] mx-auto w-full flex flex-col flex-1 animate-in fade-in slide-in-from-bottom-4">
+                <button onClick={() => setSelectedUserView(null)} className="mb-6 p-3 bg-white text-slate-500 hover:text-blue-600 rounded-2xl shadow-sm transition-all flex items-center gap-2 text-xs font-black uppercase w-fit"><ArrowLeft size={16} /> Back</button>
+                <div className="bg-white p-8 rounded-[2.5rem] shadow-md border border-slate-200/80 mb-6 flex justify-between items-center">
+                  <h2 className="text-4xl font-black text-slate-800 tracking-tight">{selectedUserView} Stats</h2>
+                  <div className="flex gap-6">
+                    <div className="text-center"><p className="text-xs font-black text-slate-500 uppercase">Total</p><p className="text-2xl font-black">{globalOwnerStats[selectedUserView]?.total || 0}</p></div>
+                    <div className="text-center"><p className="text-xs font-black text-slate-500 uppercase">Avg LT</p><p className="text-2xl font-black text-purple-600">{globalOwnerStats[selectedUserView]?.avgLeadTime || 0}d</p></div>
+                  </div>
+                </div>
+             </div>
+          )}
+        </>
+      )}
+
+      {/* Admin Login Modal */}
+      {showLoginModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-[2.5rem] p-10 max-w-sm w-full shadow-2xl text-center">
+            <h2 className="text-2xl font-black mb-6 tracking-tight">Admin Login</h2>
+            <input 
+              type="password" 
+              placeholder="••••" 
+              className="w-full px-6 py-4 rounded-2xl border-2 border-slate-100 bg-slate-50 text-center text-2xl tracking-[0.5em] outline-none mb-4 focus:border-blue-400" 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)} 
+              onKeyDown={(e) => { if (e.key === 'Enter') handleLogin(); }} 
+              autoFocus 
+            />
+            <div className="flex gap-3">
+              <button onClick={() => setShowLoginModal(false)} className="flex-1 py-4 rounded-2xl font-bold bg-slate-100 text-slate-500">Cancel</button>
+              <button onClick={handleLogin} className="flex-1 py-4 rounded-2xl font-bold text-white bg-blue-600 shadow-lg shadow-blue-200">Login</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirmId && (
+        <div className="fixed inset-0 bg-slate-900/40 z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl text-center">
+            <h2 className="text-xl font-black mb-4">Delete Task #{deleteConfirmId}?</h2>
+            <div className="flex gap-3">
+              <button onClick={() => setDeleteConfirmId(null)} className="flex-1 py-3 rounded-xl font-bold bg-slate-100 text-slate-500">Cancel</button>
+              <button onClick={() => handleDeleteTask(deleteConfirmId)} className="flex-1 py-3 rounded-xl font-bold bg-red-500 text-white">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="absolute bottom-6 left-0 right-0 pointer-events-none opacity-40"><p className="text-center text-[10px] font-medium text-slate-400 uppercase tracking-widest">Copyright @ Vincent Shin 2026</p></div>
+    </div>
+  );
+};
+export default App;
